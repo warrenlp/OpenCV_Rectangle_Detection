@@ -42,6 +42,12 @@ static double angle( Point pt1, Point pt2, Point pt0 )
     return (dx1*dx2 + dy1*dy2)/sqrt((dx1*dx1 + dy1*dy1)*(dx2*dx2 + dy2*dy2) + 1e-10);
 }
 
+// filters out squares found based on color, position, and size
+static void filterSquares(const vector<vector<Point> > colorSquares[], vector<vector<Point> > &squares)
+{
+	// Add filters here
+}
+
 // returns sequence of squares detected on the image.
 // the sequence is stored in the specified memory storage
 static void findSquares( const Mat& image, vector<vector<Point> >& squares )
@@ -54,10 +60,13 @@ static void findSquares( const Mat& image, vector<vector<Point> >& squares )
     pyrDown(image, pyr, Size(image.cols/2, image.rows/2));
     pyrUp(pyr, timg, image.size());
     vector<vector<Point> > contours;
+    vector<vector<Point> > colorSquares[3];
 
     // find squares in every color plane of the image
     for( int c = 0; c < 3; c++ )
     {
+    	colorSquares[c].clear();
+
         int ch[] = {c, 0};
         mixChannels(&timg, 1, &gray0, 1, ch, 1);
 
@@ -117,11 +126,13 @@ static void findSquares( const Mat& image, vector<vector<Point> >& squares )
                     // (all angles are ~90 degree) then write quandrange
                     // vertices to resultant sequence
                     if( maxCosine < 0.3 )
-                        squares.push_back(approx);
+                        colorSquares[c].push_back(approx);
                 }
             }
         }
     }
+
+    filterSquares(colorSquares, squares);
 }
 
 
