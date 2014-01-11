@@ -30,6 +30,13 @@ static void help()
 int thresh = 50, N = 11;
 const char* wndname = "Square Detection Demo";
 
+struct Center
+{
+    Point2f location;
+    float radius;
+    // double confidence;
+};
+
 // helper function:
 // finds a cosine of angle between vectors
 // from pt0->pt1 and from pt0->pt2
@@ -45,7 +52,7 @@ static double angle( Point pt1, Point pt2, Point pt0 )
 
 //*****************************************************************************
 /*!
- *  \brief  filterByMaxSize
+ *  \brief  FilterByMaxSize
  *
  *  \param  colorSquares, filteredBySizeSquares, maxsize
  *
@@ -54,7 +61,7 @@ static double angle( Point pt1, Point pt2, Point pt0 )
  *        Initial Version
  *
  *****************************************************************************/
-static void filterByMaxSize(const vector<vector<Point> > &colorSquares, vector<vector<Point> > &filteredBySizeSquares, const int maxsize = 100000)
+static void FilterByMaxSize(const vector<vector<Point> > &colorSquares, vector<vector<Point> > &filteredBySizeSquares, const int maxsize = 100000)
 {
 	// Eliminate squares that are greater than maximum allowable size (min size has already been filtered out)
 	vector<vector<Point> >::const_iterator citer = colorSquares.begin();
@@ -70,35 +77,179 @@ static void filterByMaxSize(const vector<vector<Point> > &colorSquares, vector<v
 
 //*****************************************************************************
 /*!
- *  \brief  filterByMaxSize
+ *  \brief  FilterByMaxSize
  *
  *  \version
  *      - W Parsons   01/12/2014
  *        Initial Version
  *
  *****************************************************************************/
-static void filterByMaxSize(const vector<vector<Point> > colorSquares[], vector<vector<Point> > filteredBySizeSquares[], const int maxsize = 100000)
+static void FilterByMaxSize(const vector<vector<Point> > colorSquares[], vector<vector<Point> > filteredBySizeSquares[], const int maxsize = 100000)
 {
 	const int numOfColorPlanes = 3;
 	// Eliminate squares that are greater than maximum allowable size (min size has already been filtered out)
 	for (int c=0; c<numOfColorPlanes; ++c)
 	{
-		filterByMaxSize(colorSquares[c], filteredBySizeSquares[c], maxsize);
+		FilterByMaxSize(colorSquares[c], filteredBySizeSquares[c], maxsize);
+	}
+}
+
+
+//*****************************************************************************
+/*!
+ *  \brief  SortByCenters
+ *
+ *  \param  colorSquares, sortedSquares, minDist
+ *
+ *  \version
+ *      - W Parsons   01/12/2014
+ *        Initial Version
+ *
+ *****************************************************************************/
+static void SortByCenters(const vector<vector<Point> > &colorSquares, vector<vector<vector<Point> > > &sortedSquares,
+	      	  	  	  	  const int minDist = 50)
+{
+	for (size_t i=0; i<colorSquares.size(); ++i)
+	{
+		bool isNew = true;
+		Center curCenter;
+		minEnclosingCircle(Mat(colorSquares[i]), curCenter.location, curCenter.radius);
+		cout << "curCenter.location: " << curCenter.location << " curCenter.radius: " << curCenter.radius << endl;
+
+		for (size_t j=0; j<sortedSquares.size() && isNew; ++j)
+		{
+			Center sortedCenter;
+
+			// For this algorithm we pick the sorted square in the middle of the array to check against since they are sorted by radius size
+			minEnclosingCircle(Mat(sortedSquares[j][ sortedSquares[j].size()/2 ]), sortedCenter.location, sortedCenter.radius);
+
+			double dist = norm(sortedCenter.location - curCenter.location);
+			cout << "dist: " << dist << endl;
+			cout << "sortedCenter.location: " << sortedCenter.location << " curCenter.location: " << curCenter.location << endl;
+			isNew = dist >= minDist && dist >= sortedCenter.radius && dist >= curCenter.radius;
+			if (!isNew)
+			{
+				// Determine where this radius fits in the group
+				size_t k = sortedSquares[j].size() - 1;
+				minEnclosingCircle(Mat(sortedSquares[j][k]), sortedCenter.location, sortedCenter.radius);
+				while( k > 0 && curCenter.radius<sortedCenter.radius )
+				{
+					k--;
+					minEnclosingCircle(Mat(sortedSquares[j][k]), sortedCenter.location, sortedCenter.radius);
+				}
+				cout << "k: " << k << endl;
+				cout << "curCenter.radius: " << curCenter.radius << " sortedCenter.radius: " << sortedCenter.radius << endl;
+				if (curCenter.radius>sortedCenter.radius)
+				{
+					++k;
+				}
+				sortedSquares[j].insert(sortedSquares[j].begin() + k, colorSquares[i]);
+			}
+		}
+		if (isNew)
+		{
+			// Start a new group of squares
+			sortedSquares.push_back(vector<vector<Point> > (1, colorSquares[i]));
+		}
+	}
+}
+
+
+//*****************************************************************************
+/*!
+ *  \brief  SortByCenters
+ *
+ *  \version
+ *      - W Parsons   01/12/2014
+ *        Initial Version
+ *
+ *****************************************************************************/
+static void SortByCenters(const vector<vector<Point> > colorSquares[], vector<vector<vector<Point> > > sortededByCentersSquares[],
+					      const int minDist = 50)
+{
+	const int numOfColorPlanes = 3;
+	// Eliminate squares that are greater than maximum allowable size (min size has already been filtered out)
+	for (int c=0; c<numOfColorPlanes; ++c)
+	{
+		SortByCenters(colorSquares[c], sortededByCentersSquares[c], minDist);
+	}
+}
+
+
+//*****************************************************************************
+/*!
+ *  \brief  DumpSortedCenterData
+ *
+ *  \version
+ *      - W Parsons   01/12/2014
+ *        Initial Version
+ *
+ *****************************************************************************/
+static void DumpSortedCenterData(const vector<vector<vector<Point> > > &sortedByCenterSquares)
+{
+	vector<vector<vector<Point> > >::const_iterator cCenterDataIter = sortedByCenterSquares.begin();
+	for (; cCenterDataIter != sortedByCenterSquares.end(); ++cCenterDataIter)
+	{
+		vector<vector<Point> >::const_iterator cCenterIter = cCenterDataIter->begin();
+		for (; cCenterIter != cCenterDataIter->end(); ++cCenterIter)
+		{
+			Center center;
+			minEnclosingCircle(Mat(*cCenterIter), center.location, center.radius);
+			cout << "L: " << center.location << " R: " << center.radius << "\t";
+		}
+		cout << endl;
+	}
+
+	cout << endl;
+}
+
+
+//*****************************************************************************
+/*!
+ *  \brief  DumpSortedCenterData
+ *
+ *  \version
+ *      - W Parsons   01/12/2014
+ *        Initial Version
+ *
+ *****************************************************************************/
+static void DumpSortedCenterData(const vector<vector<vector<Point> > > sortedByCenterSquares[])
+{
+	const int numOfColorPlanes = 3;
+	// Eliminate squares that are greater than maximum allowable size (min size has already been filtered out)
+	for (int c=0; c<numOfColorPlanes; ++c)
+	{
+		cout << "Dumping Data from layer \"" << c << "\" sortedByCenterSquares:" << endl;
+		DumpSortedCenterData(sortedByCenterSquares[c]);
 	}
 }
 
 
 // filters out squares found based on color, position, and size
-static void filterSquares(const vector<vector<Point> > colorSquares[], vector<vector<Point> > &squares)
+static void FilterSquares(vector<vector<Point> > colorSquares[], vector<vector<Point> > &squares)
 {
 	squares.clear();
 
 	const int maxsize = 100000;
-
+	const int minDstBtnCtrs = 50;
 	vector<vector<Point> > filteredBySizeSquares[3];
+	vector<vector<vector<Point> > > sortedByCenterSquares[3];
 
 	// Eliminate squares that are greater than maximum allowable size (min size has already been filtered out)
-	filterByMaxSize(colorSquares, filteredBySizeSquares, maxsize);
+	FilterByMaxSize(colorSquares, filteredBySizeSquares, maxsize);
+
+	// Sorts Squares into groups which share the same approximate center
+	//	This is calculated based on the containing circle of the contours as well as the distance between centers
+	SortByCenters(filteredBySizeSquares, sortedByCenterSquares, minDstBtnCtrs);
+
+	DumpSortedCenterData(sortedByCenterSquares);
+
+	for (size_t c=0; c<3; ++c)
+	{
+		// Make sure we don't need the old, unfiltered squares data here any more
+		colorSquares[c].clear();
+		std::copy(filteredBySizeSquares[c].begin(), filteredBySizeSquares[c].end(), std::back_inserter(colorSquares[c]));
+	}
 
 	for (size_t c=0; c<3; ++c)
 	{
@@ -108,7 +259,7 @@ static void filterSquares(const vector<vector<Point> > colorSquares[], vector<ve
 
 // returns sequence of squares detected on the image.
 // the sequence is stored in the specified memory storage
-static void findSquares( const Mat& image, vector<vector<Point> >& squares )
+static void FindSquares( const Mat& image, vector<vector<Point> >& squares, vector<vector<Point> > colorSquares[] )
 {
     squares.clear();
 
@@ -118,7 +269,6 @@ static void findSquares( const Mat& image, vector<vector<Point> >& squares )
     pyrDown(image, pyr, Size(image.cols/2, image.rows/2));
     pyrUp(pyr, timg, image.size());
     vector<vector<Point> > contours;
-    vector<vector<Point> > colorSquares[3];
 
     // find squares in every color plane of the image
     for( int c = 0; c < 3; c++ )
@@ -190,12 +340,12 @@ static void findSquares( const Mat& image, vector<vector<Point> >& squares )
         }
     }
 
-    filterSquares(colorSquares, squares);
+    FilterSquares(colorSquares, squares);
 }
 
 
 // the function draws all the squares in the image
-static void drawSquares( Mat& image, const vector<vector<Point> >& squares )
+static void DrawSquares( Mat& image, const vector<vector<Point> >& squares )
 {
     for( size_t i = 0; i < squares.size(); i++ )
     {
@@ -208,13 +358,53 @@ static void drawSquares( Mat& image, const vector<vector<Point> >& squares )
 }
 
 
+// the function draws all the squares in the image on their respective color planes and colors
+static void DrawSquares( Mat& image, const vector<vector<Point> > squares[] )
+{
+	const int numOfColorPlanes = 3;
+	Scalar color;
+	const Scalar CV_BLUE(255, 0, 0);
+	const Scalar CV_GREEN(0, 255, 0);
+	const Scalar CV_RED(0, 0, 255);
+
+	for (size_t c=0; c<numOfColorPlanes; ++c)
+	{
+		switch(c)
+		{
+		case 0:
+			color = CV_BLUE;
+			break;
+		case 1:
+			color = CV_GREEN;
+			break;
+		case 2:
+			color = CV_RED;
+			break;
+		default:
+			break;
+		}
+
+		for( size_t i = 0; i < squares[c].size(); i++ )
+		{
+			const Point* p = &squares[c][i][0];
+			int n = (int)squares[c][i].size();
+			polylines(image, &p, &n, 1, true, color, 3, CV_AA);
+		}
+	}
+
+    imshow(wndname, image);
+}
+
+
 int main(int /*argc*/, char** /*argv*/)
 {
-    static const char* names[] = { "pic1.png", "pic2.png", "pic3.png",
-        "pic4.png", "pic5.png", "pic6.png", 0 };
+//    static const char* names[] = { "pic1.png", "pic2.png", "pic3.png",
+//        "pic4.png", "pic5.png", "pic6.png", 0 };
+	static const char* names[] = { "PaperRectangle.jpg", "PaperRectangle2.jpg", "PaperRectangle_light.jpg", 0 };
     help();
     namedWindow( wndname, 1 );
     vector<vector<Point> > squares;
+    vector<vector<Point> > colorSquares[3];
 
     for( int i = 0; names[i] != 0; i++ )
     {
@@ -225,8 +415,9 @@ int main(int /*argc*/, char** /*argv*/)
             continue;
         }
 
-        findSquares(image, squares);
-        drawSquares(image, squares);
+        FindSquares(image, squares, colorSquares);
+        //DrawSquares(image, squares);
+        DrawSquares(image, colorSquares);
 
         int c = waitKey();
         if( (char)c == 27 )
