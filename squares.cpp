@@ -42,10 +42,68 @@ static double angle( Point pt1, Point pt2, Point pt0 )
     return (dx1*dx2 + dy1*dy2)/sqrt((dx1*dx1 + dy1*dy1)*(dx2*dx2 + dy2*dy2) + 1e-10);
 }
 
+
+//*****************************************************************************
+/*!
+ *  \brief  filterByMaxSize
+ *
+ *  \param  colorSquares, filteredBySizeSquares, maxsize
+ *
+ *  \version
+ *      - W Parsons   01/12/2014
+ *        Initial Version
+ *
+ *****************************************************************************/
+static void filterByMaxSize(const vector<vector<Point> > &colorSquares, vector<vector<Point> > &filteredBySizeSquares, const int maxsize = 100000)
+{
+	// Eliminate squares that are greater than maximum allowable size (min size has already been filtered out)
+	vector<vector<Point> >::const_iterator citer = colorSquares.begin();
+	for (; citer != colorSquares.end(); ++citer)
+	{
+		if (fabs(contourArea(Mat(*citer))) < maxsize)
+		{
+			filteredBySizeSquares.push_back(*citer);
+		}
+	}
+}
+
+
+//*****************************************************************************
+/*!
+ *  \brief  filterByMaxSize
+ *
+ *  \version
+ *      - W Parsons   01/12/2014
+ *        Initial Version
+ *
+ *****************************************************************************/
+static void filterByMaxSize(const vector<vector<Point> > colorSquares[], vector<vector<Point> > filteredBySizeSquares[], const int maxsize = 100000)
+{
+	const int numOfColorPlanes = 3;
+	// Eliminate squares that are greater than maximum allowable size (min size has already been filtered out)
+	for (int c=0; c<numOfColorPlanes; ++c)
+	{
+		filterByMaxSize(colorSquares[c], filteredBySizeSquares[c], maxsize);
+	}
+}
+
+
 // filters out squares found based on color, position, and size
 static void filterSquares(const vector<vector<Point> > colorSquares[], vector<vector<Point> > &squares)
 {
-	// Add filters here
+	squares.clear();
+
+	const int maxsize = 100000;
+
+	vector<vector<Point> > filteredBySizeSquares[3];
+
+	// Eliminate squares that are greater than maximum allowable size (min size has already been filtered out)
+	filterByMaxSize(colorSquares, filteredBySizeSquares, maxsize);
+
+	for (size_t c=0; c<3; ++c)
+	{
+		std::copy(filteredBySizeSquares[c].begin(), filteredBySizeSquares[c].end(), std::back_inserter(squares));
+	}
 }
 
 // returns sequence of squares detected on the image.
