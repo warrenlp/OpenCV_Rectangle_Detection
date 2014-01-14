@@ -114,7 +114,6 @@ static void SortByCenters(const vector<vector<Point> > &colorSquares, vector<vec
 		bool isNew = true;
 		Center curCenter;
 		minEnclosingCircle(Mat(colorSquares[i]), curCenter.location, curCenter.radius);
-		cout << "curCenter.location: " << curCenter.location << " curCenter.radius: " << curCenter.radius << endl;
 
 		for (size_t j=0; j<sortedSquares.size() && isNew; ++j)
 		{
@@ -124,8 +123,6 @@ static void SortByCenters(const vector<vector<Point> > &colorSquares, vector<vec
 			minEnclosingCircle(Mat(sortedSquares[j][ sortedSquares[j].size()/2 ]), sortedCenter.location, sortedCenter.radius);
 
 			double dist = norm(sortedCenter.location - curCenter.location);
-			cout << "dist: " << dist << endl;
-			cout << "sortedCenter.location: " << sortedCenter.location << " curCenter.location: " << curCenter.location << endl;
 			isNew = dist >= minDist && dist >= sortedCenter.radius && dist >= curCenter.radius;
 			if (!isNew)
 			{
@@ -137,8 +134,6 @@ static void SortByCenters(const vector<vector<Point> > &colorSquares, vector<vec
 					k--;
 					minEnclosingCircle(Mat(sortedSquares[j][k]), sortedCenter.location, sortedCenter.radius);
 				}
-				cout << "k: " << k << endl;
-				cout << "curCenter.radius: " << curCenter.radius << " sortedCenter.radius: " << sortedCenter.radius << endl;
 				if (curCenter.radius>sortedCenter.radius)
 				{
 					++k;
@@ -225,8 +220,139 @@ static void DumpSortedCenterData(const vector<vector<vector<Point> > > sortedByC
 }
 
 
+//*****************************************************************************
+/*!
+ *  \brief  ConsolidateSquares
+ *
+ *  \version
+ *      - W Parsons   01/13/2014
+ *        Initial Version
+ *
+ *****************************************************************************/
+static void ConsolidateSquares(const vector<vector<vector<Point> > > sortedSquares[], vector<vector<Point> > &consolidatedSquares)
+{
+	// Make sure we don't have any residual data in this vector or we could end up with repeats
+	consolidatedSquares.clear();
+
+	const int numOfColorPlanes = 3;
+	vector<vector<vector<Point> > > sortedByCenterSquares;
+	const int minDist = 50;
+
+	// For this algorithm we simply select the square located in the middle of the vector since they are sorted by radius size
+
+	// Pull center from each plane into one vector
+	for (int c=0; c<numOfColorPlanes; ++c)
+	{
+		vector<vector<vector<Point> > >::const_iterator cSortedIter = sortedSquares[c].begin();
+		for (; cSortedIter != sortedSquares[c].end(); ++cSortedIter)
+		{
+			size_t middle = cSortedIter->size()/2;
+			vector<Point> middleSquare = cSortedIter->at(middle);
+			consolidatedSquares.push_back(middleSquare);
+		}
+	}
+
+	// Reduce to one unique square
+	//	Color information is gone by this point
+	SortByCenters(consolidatedSquares, sortedByCenterSquares, minDist);
+
+	DumpSortedCenterData(sortedByCenterSquares);
+
+	consolidatedSquares.clear();
+
+	vector<vector<vector<Point> > >::const_iterator cSortedIter = sortedByCenterSquares.begin();
+	for (; cSortedIter != sortedByCenterSquares.end(); ++cSortedIter)
+	{
+		size_t middle = cSortedIter->size()/2;
+		vector<Point> middleSquare = cSortedIter->at(middle);
+		consolidatedSquares.push_back(middleSquare);
+	}
+}
+
+
+//*****************************************************************************
+/*!
+ *  \brief  FilterByBGR
+ *
+ *  \version
+ *      - W Parsons   01/13/2014
+ *        Initial Version
+ *
+ *****************************************************************************/
+static void FilterByBGR(const Mat& image, const vector<vector<Point> > &sortedSquares,
+					    vector<vector<Point> > &sortedByRGBSquares,
+					    const vector<Scalar> &colorRange)
+{
+	// Make sure that we don't have any residual data in the returned vector
+	sortedByRGBSquares.clear();
+
+	Mat upperMat;
+	Mat lowerMat;
+	Mat resultMat;
+
+	bool isInRange(true);
+
+	vector<vector<Point> >::const_iterator cSortedSquaresIter = sortedSquares.begin();
+	for (; cSortedSquaresIter != sortedSquares.end(); ++cSortedSquaresIter)
+	{
+		Rect rect = boundingRect(*cSortedSquaresIter);
+
+		// Reduce rect to 25% (50% per side) with center as anchor point
+		Point2i topLeft(rect.tl());
+		Point2i botRight(rect.br());
+		Point2i delta = botRight - topLeft;
+		topLeft += (delta * 0.25);
+		botRight -= (delta * 0.25);
+
+		rect = Rect(topLeft, botRight);
+
+		// Define the Region of Interest (ROI)
+		Mat imageRect = image(rect);
+
+		lowerMat = Mat(imageRect.size(), CV_8UC3, colorRange[0]);
+		upperMat = Mat(imageRect.size(), CV_8UC3, colorRange[1]);
+		resultMat = Mat::zeros(imageRect.size(), CV_8U);
+
+		inRange(imageRect, lowerMat, upperMat, resultMat);
+
+		vector<Mat> planes;
+		split(imageRect, planes);
+		for (int c=0; c<3; ++c)
+		{
+			resultMat.copyTo(planes[c]);
+		}
+		merge(planes, imageRect);
+
+		// For this algorithm, we make sure that we have 100% containment within the color range
+		// 	For this we use a pixel-wise logical-AND operation
+		int nr = resultMat.rows;
+		int nc = resultMat.cols; // * resultMat.channels(); // Should be only one channel, but just in case...
+		for (int i=0; i<nr && isInRange; ++i)
+		{
+			uchar* data = resultMat.ptr<uchar>(i);
+			for (int j=0; j<nc && isInRange; ++j)
+			{
+				if (data[j] != 255)
+				{
+					isInRange = false;
+				}
+			}
+		}
+
+		if (isInRange)
+		{
+			sortedByRGBSquares.push_back(*cSortedSquaresIter);
+		}
+		else
+		{
+			isInRange = true;
+		}
+	}
+}
+
+
 // filters out squares found based on color, position, and size
-static void FilterSquares(vector<vector<Point> > colorSquares[], vector<vector<Point> > &squares)
+static void FilterSquares(const Mat& image, vector<vector<Point> > colorSquares[], vector<vector<Point> > &squares)
 {
 	squares.clear();
 
@@ -234,6 +360,8 @@ static void FilterSquares(vector<vector<Point> > colorSquares[], vector<vector<P
 	const int minDstBtnCtrs = 50;
 	vector<vector<Point> > filteredBySizeSquares[3];
 	vector<vector<vector<Point> > > sortedByCenterSquares[3];
+	vector<vector<Point> > consolidatedSquares;
+	vector<vector<Point> > sortedByRGBSquares;
 
 	// Eliminate squares that are greater than maximum allowable size (min size has already been filtered out)
 	FilterByMaxSize(colorSquares, filteredBySizeSquares, maxsize);
@@ -244,6 +372,20 @@ static void FilterSquares(vector<vector<Point> > colorSquares[], vector<vector<P
 
 	DumpSortedCenterData(sortedByCenterSquares);
 
+	// Reduces the squares to a single, unique square across all color planes
+	ConsolidateSquares(sortedByCenterSquares, consolidatedSquares);
+
+	// This is a very permissive range being the whole upper-half of the gray-scale spectrum
+	//		Later on the algorithm will reject any image with any pixels out of this range, so we need it to be permissive
+	vector<Scalar> colorRange;
+	colorRange.push_back(Scalar(125,125,125));
+	colorRange.push_back(Scalar(255,255,255));
+
+	// Removes squares that do not fit within the prescribed color range
+	FilterByBGR(image, consolidatedSquares, sortedByRGBSquares, colorRange);
+
+//TODO: Add FilterByHSL()???   // This might come in useful as resistance to different lighting conditions
+
 	for (size_t c=0; c<3; ++c)
 	{
 		// Make sure we don't need the old, unfiltered squares data here any more
@@ -251,10 +393,7 @@ static void FilterSquares(vector<vector<Point> > colorSquares[], vector<vector<P
 		std::copy(filteredBySizeSquares[c].begin(), filteredBySizeSquares[c].end(), std::back_inserter(colorSquares[c]));
 	}
 
-	for (size_t c=0; c<3; ++c)
-	{
-		std::copy(filteredBySizeSquares[c].begin(), filteredBySizeSquares[c].end(), std::back_inserter(squares));
-	}
+	std::copy(sortedByRGBSquares.begin(), sortedByRGBSquares.end(), std::back_inserter(squares));
 }
 
 // returns sequence of squares detected on the image.
@@ -271,7 +410,7 @@ static void FindSquares( const Mat& image, vector<vector<Point> >& squares, vect
     vector<vector<Point> > contours;
 
     // find squares in every color plane of the image
-    for( int c = 0; c < 3; c++ )
+    for ( int c=0; c<3; ++c )
     {
     	colorSquares[c].clear();
 
@@ -340,7 +479,7 @@ static void FindSquares( const Mat& image, vector<vector<Point> >& squares, vect
         }
     }
 
-    FilterSquares(colorSquares, squares);
+    FilterSquares(image, colorSquares, squares);
 }
 
 
@@ -398,9 +537,9 @@ static void DrawSquares( Mat& image, const vector<vector<Point> > squares[] )
 
 int main(int /*argc*/, char** /*argv*/)
 {
-//    static const char* names[] = { "pic1.png", "pic2.png", "pic3.png",
-//        "pic4.png", "pic5.png", "pic6.png", 0 };
-	static const char* names[] = { "PaperRectangle.jpg", "PaperRectangle2.jpg", "PaperRectangle_light.jpg", 0 };
+    static const char* names[] = { "pic1.png", "pic2.png", "pic3.png",
+        "pic4.png", "pic5.png", "pic6.png", 0 };
+//	static const char* names[] = { "PaperRectangle.jpg", "PaperRectangle2.jpg", "PaperRectangle_light.jpg", 0 };
     help();
     namedWindow( wndname, 1 );
     vector<vector<Point> > squares;
@@ -416,8 +555,8 @@ int main(int /*argc*/, char** /*argv*/)
         }
 
         FindSquares(image, squares, colorSquares);
-        //DrawSquares(image, squares);
-        DrawSquares(image, colorSquares);
+        DrawSquares(image, squares);
+        //DrawSquares(image, colorSquares);
 
         int c = waitKey();
         if( (char)c == 27 )
