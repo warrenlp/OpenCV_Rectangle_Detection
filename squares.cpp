@@ -9,6 +9,7 @@
 #include <iostream>
 #include <math.h>
 #include <string.h>
+#include <numeric>
 
 using namespace cv;
 using namespace std;
@@ -537,20 +538,25 @@ static void DrawSquares( Mat& image, const vector<vector<Point> > squares[] )
 
 int main(int /*argc*/, char** /*argv*/)
 {
-    static const char* names[] = { "pic1.png", "pic2.png", "pic3.png",
-        "pic4.png", "pic5.png", "pic6.png", 0 };
-//	static const char* names[] = { "PaperRectangle.jpg", "PaperRectangle2.jpg", "PaperRectangle_light.jpg", 0 };
+	vector<int> x(6);
+	// Generate vector of ints from 1 to 6
+	iota(begin(x), end(x), 1);
+
+	vector<string> names(6);
+	transform(x.cbegin(), x.cend(), names.begin(), [](const int in) { return "pic" + to_string(in) + ".png"; });
+
     help();
     namedWindow( wndname, 1 );
     vector<vector<Point> > squares;
     vector<vector<Point> > colorSquares[3];
 
-    for( int i = 0; names[i] != 0; i++ )
+    for(auto name : names)
     {
-        Mat image = imread(names[i], 1);
+		cout << "Name: " << name << endl;
+        Mat image = imread(name, 1);
         if( image.empty() )
         {
-            cout << "Couldn't load " << names[i] << endl;
+            cout << "Couldn't load " << name << endl;
             continue;
         }
 
