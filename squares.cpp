@@ -7,6 +7,7 @@
 #include "opencv2/highgui/highgui.hpp"
 
 #include <iostream>
+#include <memory>
 #include <math.h>
 #include <string.h>
 #include <numeric>
@@ -14,18 +15,30 @@
 using namespace cv;
 using namespace std;
 
+
+template<typename ... Args>
+std::string string_format(const std::string& format, Args ... args) 
+{
+    size_t size = snprintf(nullptr, 0, format.c_str(), args ... ) + 1;
+    if (size <= 0) { throw std::runtime_error("Error during formatting."); }
+    std::unique_ptr<char[]> buf(new char[size]);
+    snprintf(buf.get(), size, format.c_str(), args ...);
+    return std::string(buf.get(), buf.get() + size - 1);
+}
+
 static void help()
 {
-    cout << "\nA program using pyramid scaling, Canny, contours, contour simpification and\n"
-            "memory storage (it's got it all folks) to find\n"
-            "squares in a list of images pic1-6.png\n"
-            "Returns sequence of squares detected on the image.\n"
-            "the sequence is stored in the specified memory storage\n"
-            "Call:\n"
-            "./squares\n"
-            "Using OpenCV version %s\n"
-         << CV_VERSION << "\n"
-         << endl;
+    std::string help_msg_format(
+        "\nA program using pyramid scaling, Canny, contours, contour simpification and\n"
+        "memory storage (it's got it all folks) to find\n"
+        "squares in a list of images pic1-6.png\n"
+        "Returns sequence of squares detected on the image.\n"
+        "the sequence is stored in the specified memory storage\n"
+        "Call:\n"
+        "./squares\n"
+        "Using OpenCV version %s\n");
+
+    cout << string_format(help_msg_format, CV_VERSION) << endl;
 }
 
 int thresh = 50, N = 11;
@@ -388,8 +401,8 @@ static void FilterSquares(const Mat &image, vector<vector<Point>> colorSquares[]
     std::copy(sortedByRGBSquares.begin(), sortedByRGBSquares.end(), std::back_inserter(squares));
 }
 
-// returns sequence of squares detected on the image.
-// the sequence is stored in the specified memory storage
+// Returns sequence of squares detected on the image.
+// The sequence is stored in the specified memory storage.
 static void FindSquares(const Mat &image, vector<vector<Point>> &squares, vector<vector<Point>> colorSquares[])
 {
     squares.clear();
@@ -436,7 +449,7 @@ static void FindSquares(const Mat &image, vector<vector<Point>> &squares, vector
             vector<Point> approx;
 
             // test each contour
-            for (size_t i = 0; i < contours.size(); i++)
+            for (size_t i = 0; i < contours.size(); ++i)
             {
                 // approximate contour with accuracy proportional
                 // to the contour perimeter
@@ -550,7 +563,6 @@ int main(int /*argc*/, char ** /*argv*/)
 
         FindSquares(image, squares, colorSquares);
         DrawSquares(image, squares);
-        //DrawSquares(image, colorSquares);
 
         int c = waitKey();
         if ((char)c == 27)
