@@ -67,42 +67,20 @@ static double angle(Point pt1, Point pt2, Point pt0)
 /*!
  *  \brief  FilterByMaxSize
  *
- *  \param  colorSquares, filteredBySizeSquares, maxsize
- *
  *  \version
- *      - W Parsons   01/12/2014
- *        Initial Version
+ *      - W Parsons   04/15/2020
+ *        Updated to std::copy_if
  *
  *****************************************************************************/
-static void FilterByMaxSize(const vector<vector<Point>> &colorSquares, vector<vector<Point>> &filteredBySizeSquares, const int maxsize = 100000)
-{
-    // Eliminate squares that are greater than maximum allowable size (min size has already been filtered out)
-    vector<vector<Point>>::const_iterator citer = colorSquares.begin();
-    for (; citer != colorSquares.end(); ++citer)
-    {
-        if (fabs(contourArea(Mat(*citer))) < maxsize)
-        {
-            filteredBySizeSquares.push_back(*citer);
-        }
-    }
-}
-
-//*****************************************************************************
-/*!
- *  \brief  FilterByMaxSize
- *
- *  \version
- *      - W Parsons   01/12/2014
- *        Initial Version
- *
- *****************************************************************************/
-static void FilterByMaxSize(const vector<vector<Point>> colorSquares[], vector<vector<Point>> filteredBySizeSquares[], const int maxsize = 100000)
+static void FilterByMaxSize(const vector<vector<Point>> colorSquares[], vector<vector<Point>> filteredBySizeSquares[], const int maxsize=100000)
 {
     const int numOfColorPlanes = 3;
     // Eliminate squares that are greater than maximum allowable size (min size has already been filtered out)
     for (int c = 0; c < numOfColorPlanes; ++c)
     {
-        FilterByMaxSize(colorSquares[c], filteredBySizeSquares[c], maxsize);
+        // Eliminate squares that are greater than maximum allowable size
+        copy_if(colorSquares[c].cbegin(), colorSquares[c].cend(), std::back_inserter(filteredBySizeSquares[c]),
+                [=](auto x){return fabs(contourArea(Mat(x))) < maxsize;} );
     }
 }
 
@@ -118,7 +96,7 @@ static void FilterByMaxSize(const vector<vector<Point>> colorSquares[], vector<v
  *
  *****************************************************************************/
 static void SortByCenters(const vector<vector<Point>> &colorSquares, vector<vector<vector<Point>>> &sortedSquares,
-                          const int minDist = 50)
+                          const int minDist=50)
 {
     for (size_t i = 0; i < colorSquares.size(); ++i)
     {
