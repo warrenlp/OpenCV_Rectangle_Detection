@@ -163,24 +163,35 @@ static void SortByCenters(const vector<vector<Point>> colorSquares[], vector<vec
  *  \brief  DumpSortedCenterData
  *
  *  \version
- *      - W Parsons   01/12/2014
- *        Initial Version
+ *      - W Parsons   04/16/2020
+ *        Updated to C++11-style string join using accumulator
  *
  *****************************************************************************/
 static void DumpSortedCenterData(const vector<vector<vector<Point>>> &sortedByCenterSquares)
 {
-    vector<vector<vector<Point>>>::const_iterator cCenterDataIter = sortedByCenterSquares.begin();
-    for (; cCenterDataIter != sortedByCenterSquares.end(); ++cCenterDataIter)
-    {
-        vector<vector<Point>>::const_iterator cCenterIter = cCenterDataIter->begin();
-        for (; cCenterIter != cCenterDataIter->end(); ++cCenterIter)
-        {
-            Center center;
-            minEnclosingCircle(Mat(*cCenterIter), center.location, center.radius);
-            cout << "L: " << center.location << " R: " << center.radius << "\t";
+    auto centerInfoStr = [](const vector<Point>& center) {
+        Center curCenter;
+        minEnclosingCircle(Mat(center), curCenter.location, curCenter.radius);
+        return (dynamic_cast<ostringstream&>(
+            ostringstream() << "C: " << curCenter.location << " R: " << curCenter.radius
+        )).str();
+    };
+
+    for_each(sortedByCenterSquares.cbegin(), sortedByCenterSquares.cend(),
+        [&centerInfoStr](const vector<vector<Point>>& sortedByCenterSquare) {
+            vector<string> centerInfos(sortedByCenterSquare.size());
+            transform(sortedByCenterSquare.cbegin(), sortedByCenterSquare.cend(), centerInfos.begin(),
+                      centerInfoStr);
+
+            // Join strings with ","
+            string centerStr = accumulate(centerInfos.cbegin(), centerInfos.cend(), std::string(), 
+                [](const std::string& a, const std::string& b) -> std::string {
+                    return a + (a.length() > 0 ? ", " : "") + b;
+            });
+
+            cout << centerStr << endl;
         }
-        cout << endl;
-    }
+    );
 
     cout << endl;
 }
